@@ -3,60 +3,65 @@ package apis
 import (
 	"errors"
 	"fmt"
-	"path"
-	"strings"
+	"reflect"
 	"sync"
 
 	"github.com/blang/semver/v4"
 )
 
-var ErrAPINotFound = errors.New("api not found")
-
-// Resolver function for resolving type name
-type Resolver func(string) (interface{}, error)
+var errAPINotFound = errors.New("api not found")
 
 // PackageMap contains a list of packages with their Resolver func
-var packageMap = map[string]Resolver{}
+var typeMap = map[string]map[string]reflect.Type{}
 
-var packageMapMu = &sync.RWMutex{}
+var typeMapMu = &sync.RWMutex{}
 
-// RegisterResolver adds a package to packageMap with its resolver.
-func RegisterResolver(key string, resolver Resolver) {
-	packageMapMu.Lock()
-	defer packageMapMu.Unlock()
-	packageMap[key] = resolver
+// RegisterType allows modules to register API types to be resolved.
+// By default a type registered can be resolved by its type's name. Optionally
+// aliases can be provided that will also resolve the type.
+//
+// example:
+// after calling RegisterType("core/v2", new(corev2.Asset), "asset"),
+// calling Resolve("core/v2", "Asset") or Resolve("core/v2", "asset") should
+// return a corev2.Asset.
+func RegisterType(apiGroup string, t any, typeAlias ...string) {
+	rrt := reflect.ValueOf(t)
+	rType := reflect.Indirect(rrt).Type()
+	typeMapMu.Lock()
+	defer typeMapMu.Unlock()
+	if _, ok := typeMap[apiGroup]; !ok {
+		typeMap[apiGroup] = map[string]reflect.Type{}
+	}
+	typeMap[apiGroup][rType.Name()] = rType
+	for _, alias := range typeAlias {
+		typeMap[apiGroup][alias] = rType
+	}
 }
 
-// Resolveaw resolves the raw type for the requested type.
+// Resolve resolves the raw type for the requested api version and type.
 func Resolve(apiVersion string, typename string) (interface{}, error) {
-	availableModules := APIModuleVersions()
 
 	// Guard read access to packageMap
-	packageMapMu.RLock()
-	defer packageMapMu.RUnlock()
-	apiGroup, reqVer := ParseAPIVersion(apiVersion)
-	foundVer, ok := availableModules[apiGroup]
-	if ok {
+	typeMapMu.RLock()
+	defer typeMapMu.RUnlock()
+	apiGroup, reqVer := parseAPIVersion(apiVersion)
+
+	group, ok := typeMap[apiGroup]
+	if !ok {
+		return nil, fmt.Errorf("api group %s has not been registered", apiGroup)
+	}
+	typ, ok := group[typename]
+	if !ok {
+		return nil, errAPINotFound
+	}
+
+	if foundVer, err := versionOf(typ); err == nil {
 		if semverGreater(reqVer, foundVer) {
 			return nil, fmt.Errorf("requested version was %s, but only %s is available", reqVer, foundVer)
 		}
 	}
-	resolver, ok := packageMap[apiGroup]
-	if !ok {
-		return nil, ErrAPINotFound
-	}
-	return resolver(typename)
-}
 
-func ApiVersion(version string) string {
-	parts := strings.Split(version, "/")
-	if len(parts) == 0 {
-		return ""
-	}
-	if len(parts) == 1 {
-		return parts[0]
-	}
-	return path.Join(parts[len(parts)-2], parts[len(parts)-1])
+	return reflect.New(typ).Interface(), nil
 }
 
 func semverGreater(s1, s2 string) bool {

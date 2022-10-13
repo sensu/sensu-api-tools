@@ -11,16 +11,9 @@ import (
 func TestResolveType(t *testing.T) {
 	type TestAPITypeA struct{}
 	type TestAPITypeB struct{}
-	resolver := func(s string) (interface{}, error) {
-		switch s {
-		case "TestAPITypeA":
-			return new(TestAPITypeA), nil
-		case "TestAPITypeB":
-			return new(TestAPITypeB), nil
-		}
-		return nil, apis.ErrAPINotFound
-	}
-	apis.RegisterResolver("apis_test/v1", resolver)
+	apis.RegisterType("apis_test/v1", new(TestAPITypeA))
+	apis.RegisterType("apis_test/v1", new(TestAPITypeB))
+	apis.RegisterType("apis_test/v2", new(TestAPITypeA), "test_api_type_a", "kazoo")
 	testCases := []struct {
 		ApiVersion string
 		Type       string
@@ -43,6 +36,24 @@ func TestResolveType(t *testing.T) {
 			ApiVersion: "apis_test/v1.0.0",
 			Type:       "TestAPITypeB",
 			ExpRet:     &TestAPITypeB{},
+			ExpErr:     false,
+		},
+		{
+			ApiVersion: "apis_test/v1.9.8",
+			Type:       "TestAPITypeB",
+			ExpRet:     &TestAPITypeB{},
+			ExpErr:     false,
+		},
+		{
+			ApiVersion: "apis_test/v2",
+			Type:       "test_api_type_a",
+			ExpRet:     &TestAPITypeA{},
+			ExpErr:     false,
+		},
+		{
+			ApiVersion: "apis_test/v2.0.0",
+			Type:       "kazoo",
+			ExpRet:     &TestAPITypeA{},
 			ExpErr:     false,
 		},
 	}
