@@ -28,7 +28,7 @@ func APIModuleVersions() map[string]string {
 	for groupName, group := range typeMap {
 		var first reflect.Type
 		for _, typ := range group {
-			first = typ
+			first = typ.Type
 			break
 		}
 		groupVersion, err := versionOf(first)

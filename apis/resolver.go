@@ -11,30 +11,76 @@ import (
 
 var errAPINotFound = errors.New("api not found")
 
-// PackageMap contains a list of packages with their Resolver func
-var typeMap = map[string]map[string]reflect.Type{}
+var (
+	typeMap   = map[string]map[string]typeRef{}
+	typeMapMu = &sync.RWMutex{}
+)
 
-var typeMapMu = &sync.RWMutex{}
+type typeRef struct {
+	Type  reflect.Type
+	Hooks []func(any)
+}
+
+func (ref typeRef) new() interface{} {
+	typ := reflect.New(ref.Type).Interface()
+	for _, hook := range ref.Hooks {
+		hook(typ)
+	}
+	return typ
+}
+
+// Option a customization on how types are resolved
+type Option interface {
+	apply(ref *typeRef)
+}
+
+// WithAlias Option allows a type to be resolved by names other than its type
+// name
+func WithAlias(alias ...string) Option {
+	return aliasOpt{
+		Aliases: alias,
+	}
+}
+
+type aliasOpt struct {
+	Aliases []string
+}
+
+// Noop to fit Option interface
+func (aliasOpt) apply(*typeRef) {}
+
+// WithResolveHook allows modules to preform initalization on resolved types
+func WithResolveHook(fn func(any)) Option {
+	return hookOpt(fn)
+}
+
+type hookOpt func(any)
+
+func (fn hookOpt) apply(ref *typeRef) {
+	ref.Hooks = append(ref.Hooks, fn)
+}
 
 // RegisterType allows modules to register API types to be resolved.
-// By default a type registered can be resolved by its type's name. Optionally
-// aliases can be provided that will also resolve the type.
-//
-// example:
-// after calling RegisterType("core/v2", new(corev2.Asset), "asset"),
-// calling Resolve("core/v2", "Asset") or Resolve("core/v2", "asset") should
-// return a corev2.Asset.
-func RegisterType(apiGroup string, t any, typeAlias ...string) {
+func RegisterType(apiGroup string, t any, opts ...Option) {
+	var typeAliases []string
+
 	rrt := reflect.ValueOf(t)
 	rType := reflect.Indirect(rrt).Type()
+	ref := typeRef{Type: rType}
+	for _, opt := range opts {
+		if alias, ok := opt.(aliasOpt); ok {
+			typeAliases = append(typeAliases, alias.Aliases...)
+		}
+		opt.apply(&ref)
+	}
 	typeMapMu.Lock()
 	defer typeMapMu.Unlock()
 	if _, ok := typeMap[apiGroup]; !ok {
-		typeMap[apiGroup] = map[string]reflect.Type{}
+		typeMap[apiGroup] = map[string]typeRef{}
 	}
-	typeMap[apiGroup][rType.Name()] = rType
-	for _, alias := range typeAlias {
-		typeMap[apiGroup][alias] = rType
+	typeMap[apiGroup][rType.Name()] = ref
+	for _, alias := range typeAliases {
+		typeMap[apiGroup][alias] = ref
 	}
 }
 
@@ -50,18 +96,18 @@ func Resolve(apiVersion string, typename string) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("api group %s has not been registered", apiGroup)
 	}
-	typ, ok := group[typename]
+	ref, ok := group[typename]
 	if !ok {
 		return nil, errAPINotFound
 	}
 
-	if foundVer, err := versionOf(typ); err == nil {
+	if foundVer, err := versionOf(ref.Type); err == nil {
 		if semverGreater(reqVer, foundVer) {
 			return nil, fmt.Errorf("requested version was %s, but only %s is available", reqVer, foundVer)
 		}
 	}
 
-	return reflect.New(typ).Interface(), nil
+	return ref.new(), nil
 }
 
 func semverGreater(s1, s2 string) bool {
