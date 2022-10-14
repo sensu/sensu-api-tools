@@ -18,7 +18,7 @@ var (
 
 type typeRef struct {
 	Type  reflect.Type
-	Hooks []func(any)
+	Hooks []func(interface{})
 }
 
 func (ref typeRef) new() interface{} {
@@ -50,18 +50,18 @@ type aliasOpt struct {
 func (aliasOpt) apply(*typeRef) {}
 
 // WithResolveHook allows modules to preform initalization on resolved types
-func WithResolveHook(fn func(any)) Option {
+func WithResolveHook(fn func(interface{})) Option {
 	return hookOpt(fn)
 }
 
-type hookOpt func(any)
+type hookOpt func(interface{})
 
 func (fn hookOpt) apply(ref *typeRef) {
 	ref.Hooks = append(ref.Hooks, fn)
 }
 
 // RegisterType allows modules to register API types to be resolved.
-func RegisterType(apiGroup string, t any, opts ...Option) {
+func RegisterType(apiGroup string, t interface{}, opts ...Option) {
 	var typeAliases []string
 
 	rrt := reflect.ValueOf(t)

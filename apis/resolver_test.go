@@ -14,7 +14,7 @@ func TestResolveType(t *testing.T) {
 	apis.RegisterType("apis_test/v1", new(TestAPITypeA))
 	apis.RegisterType("apis_test/v1", new(TestAPITypeB))
 	apis.RegisterType("apis_test/v2", new(TestAPITypeA), apis.WithAlias("test_api_type_a", "kazoo"))
-	apis.RegisterType("apis_test/v2", new(TestAPITypeB), apis.WithResolveHook(func(v any) {
+	apis.RegisterType("apis_test/v2", new(TestAPITypeB), apis.WithResolveHook(func(v interface{}) {
 		if b, ok := v.(*TestAPITypeB); ok {
 			b.T = "flute"
 		}
