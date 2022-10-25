@@ -1,14 +1,16 @@
-package apis_test
+package apitools_test
 
 import (
 	"testing"
 
 	"runtime/debug"
 
-	"github.com/sensu/sensu-api-tools/apis"
+	apitools "github.com/sensu/sensu-api-tools"
 )
 
-// TODO(eric): This test doesn't work yet because of https://github.com/golang/go/issues/33976
+// TODO(ck): Decide what to do about this test.
+// This is difficult behavior to spec, not only due to https://github.com/golang/go/issues/33976
+// but because this module intentionally excludes dependencies on the core modules.
 func TestAPIModuleVersions(t *testing.T) {
 	buildInfo, ok := debug.ReadBuildInfo()
 	if ok && buildInfo.Deps != nil {
@@ -16,7 +18,7 @@ func TestAPIModuleVersions(t *testing.T) {
 	} else {
 		t.Skip()
 	}
-	modVersions := apis.APIModuleVersions()
+	modVersions := apitools.APIModuleVersions()
 	if _, ok := modVersions["core/v2"]; !ok {
 		t.Errorf("missing core/v2 module version")
 	}

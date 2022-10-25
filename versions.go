@@ -1,4 +1,4 @@
-package apis
+package apitools
 
 import (
 	"errors"
