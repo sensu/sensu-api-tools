@@ -123,3 +123,30 @@ func semverGreater(s1, s2 string) bool {
 	}
 	return s1Ver.GT(s2Ver)
 }
+
+func copyTypeMap() map[string]map[string]typeRef {
+	typeMapMu.Lock()
+	defer typeMapMu.Unlock()
+	mapCopy := make(map[string]map[string]typeRef, len(typeMap))
+	for k, v := range typeMap {
+		inner := map[string]typeRef{}
+		for kk, vv := range v {
+			inner[kk] = vv
+		}
+		mapCopy[k] = inner
+	}
+	return mapCopy
+}
+
+// IterTypes iterates a copy of the typemap, calling fn for each type, with the
+// API group, type name, and type.
+func IterTypes(fn func(apiGroup, typename string, t any) (cont bool)) {
+	mapCopy := copyTypeMap()
+	for k, v := range mapCopy {
+		for kk, vv := range v {
+			if !fn(k, kk, vv.new()) {
+				return
+			}
+		}
+	}
+}
