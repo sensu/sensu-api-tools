@@ -16,6 +16,7 @@ import (
 var (
 	errBuildInfoUnavailable = errors.New("build info unavailable")
 	deps                    []*debug.Module
+	depsAvailable           bool
 	depsSetup               sync.Once
 )
 
@@ -44,24 +45,30 @@ func APIModuleVersions() map[string]string {
 // defining a type.
 func versionOf(typ reflect.Type) (string, error) {
 	packagePath := typ.PkgPath()
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok || buildInfo.Deps == nil {
+	packagePathParts := strings.Split(packagePath, "/")
+	dependencies, ok := buildDependencies()
+	if !ok {
 		return "", errBuildInfoUnavailable
 	}
-	for _, mod := range buildInfo.Deps {
-		if strings.HasPrefix(packagePath, mod.Path) {
-			return mod.Version, nil
+DEPSEARCH:
+	for _, mod := range dependencies {
+		for i, modPathPart := range strings.Split(mod.Path, "/") {
+			if packagePathParts[i] != modPathPart {
+				continue DEPSEARCH
+			}
 		}
+		return mod.Version, nil
 	}
 	return "", fmt.Errorf("error finding build dependency for type %s", typ)
 }
 
-func buildDependencies() []*debug.Module {
+func buildDependencies() ([]*debug.Module, bool) {
 	depsSetup.Do(func() {
 		buildInfo, ok := debug.ReadBuildInfo()
 		if !ok || buildInfo.Deps == nil {
 			return
 		}
+		depsAvailable = true
 		for _, dep := range buildInfo.Deps {
 			deps = append(deps, dep)
 		}
@@ -72,7 +79,7 @@ func buildDependencies() []*debug.Module {
 			return len(deps[i].Path) > len(deps[j].Path)
 		})
 	})
-	return deps
+	return deps, depsAvailable
 }
 
 // parseAPIVersion parses an api_version that looks like the following:
