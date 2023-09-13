@@ -103,7 +103,7 @@ func Resolve(apiVersion string, typename string) (interface{}, error) {
 
 	if foundVer, err := versionOf(ref.Type); err == nil {
 		if semverGreater(reqVer, foundVer) {
-			return nil, fmt.Errorf("requested version was %s, but only %s is available", reqVer, foundVer)
+			return nil, fmt.Errorf("requested version of %s was %s, but only %s is available", typename, reqVer, foundVer)
 		}
 	}
 
